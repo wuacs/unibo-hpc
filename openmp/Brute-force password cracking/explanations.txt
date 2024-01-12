@@ -1,0 +1,22 @@
+The For in the main function cannot be parallelized with a simple omp for directive:
+
+"""
+for (k=0; k < n && !found; k++) {
+        snprintf(key, KEY_LEN+1, "%08d", k);
+        xorcrypt(enc, out, msglen, key, KEY_LEN);
+        /* `out` contains the decrypted text; if the key is not
+           corret, `out` will contain garbage */
+        if ( 0 == memcmp(out, check, CHECK_LEN) ) {
+            printf("Key found: %s\n", key);
+            printf("Decrypted message: \"%s\"\n", out);
+            found = 1;
+        }
+    }
+"""
+
+This leads to just using the directive omp pragma parallel which will create a pool of nodes, which can be set with clause num_threads(thr),
+which execute the parallelized region.
+For this to work we need to split the values of k(the counter of the main loop) among the threads. 
+In the parallel region we can get the number of threads, let it be nts, and the thread id, let it be nid.
+(100000000)/nts=par gives us approximatley the size of the workload for each thread.
+Now to split evenly we use as start index (n*nid)/nts and as end index(excluded) (n*(nid+1))/nts.

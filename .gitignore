@@ -17,12 +17,12 @@
 *.sln
 *.swp
 
-*/bin/
-*/build/
-*/out/
+bin/
+build/
+out/
 
 
-/log/
+log/
 *.log
 
 # For CUDA
