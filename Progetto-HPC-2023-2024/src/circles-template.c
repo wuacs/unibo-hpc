@@ -129,12 +129,8 @@ void reset_displacements( void )
 int compute_forces( void )
 {
     int n_intersections = 0;
-    float dx, dy;
 
     for (int i=0; i<ncircles; i++) {
-        dx = 0;
-        dy = 0;
-        #pragma omp parallel for reduction(+:dx) reduction(+:dy) reduction(+:n_intersections) shared(circles, EPSILON, ncircles)
         for (int j=i+1; j<ncircles; j++) {
             const float deltax = circles[j].x - circles[i].x;
             const float deltay = circles[j].y - circles[i].y;
@@ -151,14 +147,12 @@ int compute_forces( void )
                 // avoid division by zero
                 const float overlap_x = overlap / (dist + EPSILON) * deltax;
                 const float overlap_y = overlap / (dist + EPSILON) * deltay;
-                dx += -(overlap_x / K);
-                dy += -(overlap_y / K);
+                circles[i].dx += -(overlap_x / K);
+                circles[i].dy += -(overlap_y / K);
                 circles[j].dx += overlap_x / K;
                 circles[j].dy += overlap_y / K;
             }
         }
-        circles[i].dx += dx;
-        circles[i].dy += dy;
     }
     return n_intersections;
 }
@@ -169,7 +163,6 @@ int compute_forces( void )
  */
 void move_circles( void )
 {
-    //#pragma omp parallel for default(none) shared(circles, ncircles)
     for (int i=0; i<ncircles; i++) {
         circles[i].x += circles[i].dx;
         circles[i].y += circles[i].dy;
@@ -188,7 +181,7 @@ void move_circles( void )
 void dump_circles( int iterno )
 {
     char fname[64];
-    snprintf(fname, sizeof(fname), "movie/circles-%05d.gp", iterno);
+    snprintf(fname, sizeof(fname), "movie-serial/circles-%05d.gp", iterno);
     FILE *out = fopen(fname, "w");
     const float WIDTH = XMAX - XMIN;
     const float HEIGHT = YMAX - YMIN;
