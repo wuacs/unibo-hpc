@@ -1,63 +1,3 @@
-/****************************************************************************
- *
- * circles.c - Circles intersection
- *
- * Copyright (C) 2023 by Moreno Marzolla <moreno.marzolla(at)unibo.it>
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- ****************************************************************************/
-
-/***
-% Circles intersection
-% Moreno Marzolla <moreno.marzolla@unibo.it>
-% Last updated on 2023-12-06
-
-This is a serial implementation of the circle intersection program
-described in the specification.
-
-To compile:
-
-        gcc -std=c99 -Wall -Wpedantic circles.c -o circles -lm
-
-To execute:
-
-        ./circles [ncircles [iterations]]
-
-where `ncircles` is the number of circles, and `iterations` is the
-number of iterations to execute.
-
-If you want to produce a movie (this is not required, and should be
-avoided when measuring the performance of the parallel versions of
-this program) compile with:
-
-        gcc -std=c99 -Wall -Wpedantic -DMOVIE circles.c -o circles.movie -lm
-
-and execute with:
-
-        ./circles.movie 200 500
-
-A lot of `circles-xxxxx.gp` files will be produced; these files must
-be processed using `gnuplot` to create individual frames:
-
-        for f in *.gp; do gnuplot "$f"; done
-
-and then assembled to produce the movie `circles.avi`:
-
-        ffmpeg -y -i "circles-%05d.png" -vcodec mpeg4 circles.avi
-
-***/
-
 #include "hpc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -121,39 +61,105 @@ void reset_displacements( void )
     }
 }
 
+void iterate(const int start_index, float** dx, float** dy, int * n_intersections, int my_rank) {
+    //iteration_done[my_rank]++;
+    int i = start_index;
+    for (int j=i+1; j<ncircles; j++) {
+        //iteration_done[my_rank]++;
+        const float deltax = circles[j].x - circles[i].x;
+        const float deltay = circles[j].y - circles[i].y;
+        const float dist = hypotf(deltax, deltay);
+        const float Rsum = circles[i].r + circles[j].r;
+        if (dist < Rsum - EPSILON) {
+            n_intersections[my_rank]++;
+            const float overlap = Rsum - dist;
+            assert(overlap > 0.0);
+            // avoid division by zero
+            const float overlap_x = overlap / (dist + EPSILON) * deltax;
+            const float overlap_y = overlap / (dist + EPSILON) * deltay;
+            dx[my_rank][i] += -(overlap_x / K);
+            dy[my_rank][i] += -(overlap_y / K);
+            dx[my_rank][j] += (overlap_x / K);
+            dy[my_rank][j] += (overlap_y / K);
+        }
+    }
+}
+
 /**
  * Compute the force acting on each circle; returns the number of
  * overlapping pairs of circles (each overlapping pair must be counted
  * only once).
  */
-int compute_forces( void )
+int compute_forces( int thread_num)
 {
     int n_intersections = 0;
 
-    for (int i=0; i<ncircles; i++) {
-        for (int j=i+1; j<ncircles; j++) {
-            const float deltax = circles[j].x - circles[i].x;
-            const float deltay = circles[j].y - circles[i].y;
-            /* hypotf(x,y) computes sqrtf(x*x + y*y) avoiding
-               overflow. This function is defined in <math.h>, and
-               should be available also on CUDA. In case of troubles,
-               it is ok to use sqrtf(x*x + y*y) instead. */
-            const float dist = hypotf(deltax, deltay);
-            const float Rsum = circles[i].r + circles[j].r;
-            if (dist < Rsum - EPSILON) {
-                n_intersections++;
-                const float overlap = Rsum - dist;
-                assert(overlap > 0.0);
-                // avoid division by zero
-                const float overlap_x = overlap / (dist + EPSILON) * deltax;
-                const float overlap_y = overlap / (dist + EPSILON) * deltay;
-                circles[i].dx += -(overlap_x / K);
-                circles[i].dy += -(overlap_y / K);
-                circles[j].dx += overlap_x / K;
-                circles[j].dy += overlap_y / K;
-            }
-        }
+    const double tstart_iter_total = hpc_gettime();
+
+    int my_rank, my_first, my_last;
+
+    const double tstart_iter_allocation = hpc_gettime();
+
+    float **dx = (float**)malloc(thread_num*sizeof(*dx));
+    float **dy = (float**)malloc(thread_num*sizeof(*dy));
+
+    for (int i = 0; i < thread_num; i++) {
+        dx[i] = (float*)calloc(ncircles, sizeof(**dx));
+        dy[i] = (float*)calloc(ncircles, sizeof(**dy));
     }
+
+    const double total_elapsed_iter_allocation = hpc_gettime() - tstart_iter_allocation;
+
+    int *private_intersection = (int*)calloc(thread_num, sizeof(*private_intersection));
+    int left_border, right_border;
+    
+    left_border = ncircles / 2 + 1;
+    right_border = ncircles / 2;
+
+    #pragma omp parallel shared(dx, dy, ncircles, private_intersection, circles, EPSILON, K, thread_num, left_border, right_border) private(my_first, my_last, my_rank) default(none)
+{
+    my_rank = omp_get_thread_num();
+    my_first = my_rank;
+    my_last = ncircles - 1 - my_first;
+    while (my_first < left_border || (my_last > right_border)) {
+        if ( my_first < left_border ) {
+            iterate(my_first, dx, dy, private_intersection, my_rank);
+        }
+        if ( my_last > right_border) {
+            iterate(my_last, dx, dy, private_intersection, my_rank);
+        }
+        my_first = my_first + thread_num;
+        my_last = ncircles - 1 - my_first;
+    }
+}
+
+    const double tstart_iter_reduction = hpc_gettime();
+
+    #pragma omp parallel for schedule(static, ncircles) default(none) shared(ncircles, thread_num, dx, dy, circles, private_intersection) reduction(+:n_intersections)
+    for (long long i = 0; i < thread_num; i++) {
+        for (long long j = 0; j < ncircles; j++) {
+            circles[j].dx+=dx[i][j];
+            circles[j].dy+=dy[i][j];
+        }
+        n_intersections+=private_intersection[i];
+    }
+
+    const double total_elapsed_iter_reduction = hpc_gettime() - tstart_iter_reduction;
+    const double total_elapsed_iter = hpc_gettime() - tstart_iter_total;
+
+    printf("total iteration took: (%f s)\n", total_elapsed_iter);
+    printf("Allocation took: (%f s)\n", total_elapsed_iter_allocation);
+    printf("Reduction took: (%f s)\n", total_elapsed_iter_reduction);
+
+    for (int i = 0; i < thread_num; i++) {
+        free(dx[i]);
+        free(dy[i]);
+    }
+    
+    free(dx);
+    free(dy);
+    free(private_intersection);
+
     return n_intersections;
 }
 
@@ -163,6 +169,7 @@ int compute_forces( void )
  */
 void move_circles( void )
 {
+    //#pragma omp parallel for default(none) shared(circles, ncircles)
     for (int i=0; i<ncircles; i++) {
         circles[i].x += circles[i].dx;
         circles[i].y += circles[i].dy;
@@ -181,7 +188,7 @@ void move_circles( void )
 void dump_circles( int iterno )
 {
     char fname[64];
-    snprintf(fname, sizeof(fname), "movie-serial/circles-%05d.gp", iterno);
+    snprintf(fname, sizeof(fname), "movie/circles-%05d.gp", iterno);
     FILE *out = fopen(fname, "w");
     const float WIDTH = XMAX - XMIN;
     const float HEIGHT = YMAX - YMIN;
@@ -203,7 +210,12 @@ int main( int argc, char* argv[] )
 {
     int n = 10000;
     int iterations = 20;
+    const char* str_num_threads = getenv("OMP_NUM_THREADS");
+    int num_threads;
 
+    assert(str_num_threads!=NULL);
+    num_threads = atoi(str_num_threads);
+    
     if ( argc > 3 ) {
         fprintf(stderr, "Usage: %s [ncircles [iterations]]\n", argv[0]);
         return EXIT_FAILURE;
@@ -227,7 +239,7 @@ int main( int argc, char* argv[] )
     for (int it=0; it<iterations; it++) {
         const double tstart_iter = hpc_gettime();
         reset_displacements();
-        const int n_overlaps = compute_forces();
+        const int n_overlaps = compute_forces(num_threads);
         move_circles();
         const double elapsed_iter = hpc_gettime() - tstart_iter;
 #ifdef MOVIE

@@ -1,63 +1,3 @@
-/****************************************************************************
- *
- * circles.c - Circles intersection
- *
- * Copyright (C) 2023 by Moreno Marzolla <moreno.marzolla(at)unibo.it>
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- ****************************************************************************/
-
-/***
-% Circles intersection
-% Moreno Marzolla <moreno.marzolla@unibo.it>
-% Last updated on 2023-12-06
-
-This is a serial implementation of the circle intersection program
-described in the specification.
-
-To compile:
-
-        gcc -std=c99 -Wall -Wpedantic circles.c -o circles -lm
-
-To execute:
-
-        ./circles [ncircles [iterations]]
-
-where `ncircles` is the number of circles, and `iterations` is the
-number of iterations to execute.
-
-If you want to produce a movie (this is not required, and should be
-avoided when measuring the performance of the parallel versions of
-this program) compile with:
-
-        gcc -std=c99 -Wall -Wpedantic -DMOVIE circles.c -o circles.movie -lm
-
-and execute with:
-
-        ./circles.movie 200 500
-
-A lot of `circles-xxxxx.gp` files will be produced; these files must
-be processed using `gnuplot` to create individual frames:
-
-        for f in *.gp; do gnuplot "$f"; done
-
-and then assembled to produce the movie `circles.avi`:
-
-        ffmpeg -y -i "circles-%05d.png" -vcodec mpeg4 circles.avi
-
-***/
-
 #include "hpc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -129,13 +69,22 @@ void reset_displacements( void )
 int compute_forces( void )
 {
     int n_intersections = 0;
-    float dx, dy;
+    int my_rank;
 
+    const double tstart_iter = hpc_gettime();
+
+    long long *iteration_done = (long long*)calloc(8, sizeof(*iteration_done));
+
+    #pragma omp parallel default(none) private(my_rank) shared(circles, EPSILON, ncircles, K, iteration_done) reduction(+:n_intersections)
+{
+    my_rank = omp_get_thread_num();
+    #pragma omp for collapse(2) schedule(static, ncircles) 
     for (int i=0; i<ncircles; i++) {
-        dx = 0;
-        dy = 0;
-        #pragma omp parallel for reduction(+:dx) reduction(+:dy) reduction(+:n_intersections) shared(circles, EPSILON, ncircles)
-        for (int j=i+1; j<ncircles; j++) {
+        for (int j=0; j<ncircles; j++) {
+            iteration_done[my_rank]++;
+            if (j==i) {
+                continue;
+            }
             const float deltax = circles[j].x - circles[i].x;
             const float deltay = circles[j].y - circles[i].y;
             /* hypotf(x,y) computes sqrtf(x*x + y*y) avoiding
@@ -151,15 +100,27 @@ int compute_forces( void )
                 // avoid division by zero
                 const float overlap_x = overlap / (dist + EPSILON) * deltax;
                 const float overlap_y = overlap / (dist + EPSILON) * deltay;
-                dx += -(overlap_x / K);
-                dy += -(overlap_y / K);
-                circles[j].dx += overlap_x / K;
-                circles[j].dy += overlap_y / K;
+                if (j<i) {
+                    circles[i].dx += (overlap_x / K);
+                    circles[i].dy += (overlap_y / K);
+                } else {
+                    circles[i].dx += -(overlap_x / K);
+                    circles[i].dy += -(overlap_y / K);
+                }
             }
         }
-        circles[i].dx += dx;
-        circles[i].dy += dy;
     }
+}
+    const double elapsed_iter = hpc_gettime() - tstart_iter;
+
+    printf("(%f s)\n", elapsed_iter);
+
+    for (int i=0; i < 8; i++) {
+        printf("Thread with id: %d did %lld iterations\n", i, iteration_done[i]);
+    }
+
+    free(iteration_done);
+
     return n_intersections;
 }
 
@@ -223,6 +184,8 @@ int main( int argc, char* argv[] )
     if (argc > 2) {
         iterations = atoi(argv[2]);
     }
+
+    srand(3);
 
     init_circles(n);
     const double tstart_prog = hpc_gettime();

@@ -129,17 +129,19 @@ void reset_displacements( void )
 int compute_forces( void )
 {
     int n_intersections = 0;
-    //int my_rank;
-    long long *iteration_done = (long long*)calloc(8, sizeof(*iteration_done));
-    //int fors[1000];
     float dxs[ncircles];
     float dys[ncircles];
-    #pragma omp parallel for schedule(static, ncircles) default(none) reduction(+:dxs[:ncircles]) reduction(+:dys[:ncircles]) reduction(+:n_intersections) shared(circles, EPSILON, ncircles, K, iteration_done)
+    int fors[1000];
+    for (int i=0; i<1000; i++) {
+        fors[i]=0;
+    }
+
+    #pragma omp parallel for collapse(2) schedule(dynamic) default(none) reduction(+:dxs[:ncircles]) reduction(+:dys[:ncircles]) reduction(+:n_intersections) shared(circles, EPSILON, ncircles, K, fors)
     for (int i=0; i<ncircles; i++) {
-        //const double tstart_iter = hpc_gettime();
-        iteration_done[omp_get_thread_num()]++;
-        for (int j=i+1; j>0; j--) {
-            iteration_done[omp_get_thread_num()]++;
+        for (int j=0; j<ncircles; j++) {
+            if (j<=i) {
+                continue;
+            }
             const float deltax = circles[j].x - circles[i].x;
             const float deltay = circles[j].y - circles[i].y;
             /* hypotf(x,y) computes sqrtf(x*x + y*y) avoiding
@@ -160,21 +162,26 @@ int compute_forces( void )
                 dxs[j] += (overlap_x / K);
                 dys[j] += (overlap_y / K);
             }
-            //fors[omp_get_thread_num()]++;
+            fors[omp_get_thread_num()]++;
         }
-
-        //const double elapsed_iter = hpc_gettime() - tstart_iter;
-        
-
-        //printf("Thread %d ci ha messo (%f s)\n", omp_get_thread_num(), elapsed_iter);
     }
 
-    for (int i=0; i < 8; i++) {
-        printf("Thread with id: %d did %lld iterations\n", i, iteration_done[i]);
+    const double tstart_iter = hpc_gettime();
+
+    #pragma omp parallel for shared(ncircles, circles, dxs, dys) default(none)
+    for (int i=0; i<ncircles; i++) {
+        circles[i].dx += dxs[i];
+        circles[i].dy += dys[i];
     }
 
-    free(iteration_done);
+    const double elapsed_iter = hpc_gettime() - tstart_iter;
     
+    printf("(%f s)\n", elapsed_iter);
+
+    for(int s=0; s<8; s++) {
+        printf("%d thread has done %d fors\n", s, fors[s]);
+    }
+
     return n_intersections;
 }
 
@@ -184,15 +191,11 @@ int compute_forces( void )
  */
 void move_circles( void )
 {
-    const double tstart_iter = hpc_gettime();
     //#pragma omp parallel for default(none) shared(circles, ncircles)
     for (int i=0; i<ncircles; i++) {
         circles[i].x += circles[i].dx;
         circles[i].y += circles[i].dy;
     }
-    const double elapsed_iter = hpc_gettime() - tstart_iter;
-
-    printf("(%f s)\n", elapsed_iter);
 }
 
 #ifdef MOVIE
