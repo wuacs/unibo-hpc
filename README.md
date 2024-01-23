@@ -4,6 +4,7 @@ In this repository you will find 3 main directories:
 - **openmp**
 - **mpi**
 - **cuda**
+- **simd**
 
 Each contains exercises and relative solutions in their respective parallelization framework.
 
