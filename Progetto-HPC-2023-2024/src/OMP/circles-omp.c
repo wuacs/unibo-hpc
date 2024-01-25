@@ -1,63 +1,3 @@
-/****************************************************************************
- *
- * circles.c - Circles intersection
- *
- * Copyright (C) 2023 by Moreno Marzolla <moreno.marzolla(at)unibo.it>
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- ****************************************************************************/
-
-/***
-% Circles intersection
-% Moreno Marzolla <moreno.marzolla@unibo.it>
-% Last updated on 2023-12-06
-
-This is a serial implementation of the circle intersection program
-described in the specification.
-
-To compile:
-
-        gcc -std=c99 -Wall -Wpedantic circles.c -o circles -lm
-
-To execute:
-
-        ./circles [ncircles [iterations]]
-
-where `ncircles` is the number of circles, and `iterations` is the
-number of iterations to execute.
-
-If you want to produce a movie (this is not required, and should be
-avoided when measuring the performance of the parallel versions of
-this program) compile with:
-
-        gcc -std=c99 -Wall -Wpedantic -DMOVIE circles.c -o circles.movie -lm
-
-and execute with:
-
-        ./circles.movie 200 500
-
-A lot of `circles-xxxxx.gp` files will be produced; these files must
-be processed using `gnuplot` to create individual frames:
-
-        for f in *.gp; do gnuplot "$f"; done
-
-and then assembled to produce the movie `circles.avi`:
-
-        ffmpeg -y -i "circles-%05d.png" -vcodec mpeg4 circles.avi
-
-***/
-
 #include "hpc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -129,17 +69,13 @@ void reset_displacements( void )
 int compute_forces( void )
 {
     int n_intersections = 0;
-    float dxs[ncircles];
-    float dys[ncircles];
-    int fors[1000];
-    for (int i=0; i<1000; i++) {
-        fors[i]=0;
-    }
 
-    #pragma omp parallel for collapse(2) schedule(dynamic) default(none) reduction(+:dxs[:ncircles]) reduction(+:dys[:ncircles]) reduction(+:n_intersections) shared(circles, EPSILON, ncircles, K, fors)
-    for (int i=0; i<ncircles; i++) {
-        for (int j=0; j<ncircles; j++) {
-            if (j<=i) {
+    const double tstart_iter = hpc_gettime();
+
+    #pragma omp parallel for collapse(2) default(none) shared(circles, EPSILON, ncircles, K) reduction(+:n_intersections) schedule(static, ncircles) 
+    for (long long i=0; i<ncircles; i++) {
+        for (long long j=0; j<ncircles; j++) {
+            if (j==i) {
                 continue;
             }
             const float deltax = circles[j].x - circles[i].x;
@@ -150,37 +86,25 @@ int compute_forces( void )
                it is ok to use sqrtf(x*x + y*y) instead. */
             const float dist = hypotf(deltax, deltay);
             const float Rsum = circles[i].r + circles[j].r;
+
             if (dist < Rsum - EPSILON) {
-                n_intersections++;
                 const float overlap = Rsum - dist;
                 assert(overlap > 0.0);
                 // avoid division by zero
                 const float overlap_x = overlap / (dist + EPSILON) * deltax;
                 const float overlap_y = overlap / (dist + EPSILON) * deltay;
-                dxs[i] += -(overlap_x / K);
-                dys[i] += -(overlap_y / K);
-                dxs[j] += (overlap_x / K);
-                dys[j] += (overlap_y / K);
+                if (j<i) {
+                    n_intersections++;
+                }
+                circles[i].dx += -(overlap_x / K);
+                circles[i].dy += -(overlap_y / K);
+                
             }
-            fors[omp_get_thread_num()]++;
         }
     }
-
-    const double tstart_iter = hpc_gettime();
-
-    #pragma omp parallel for shared(ncircles, circles, dxs, dys) default(none)
-    for (int i=0; i<ncircles; i++) {
-        circles[i].dx += dxs[i];
-        circles[i].dy += dys[i];
-    }
-
     const double elapsed_iter = hpc_gettime() - tstart_iter;
-    
-    printf("(%f s)\n", elapsed_iter);
 
-    for(int s=0; s<8; s++) {
-        printf("%d thread has done %d fors\n", s, fors[s]);
-    }
+    printf("(%f s)\n", elapsed_iter);
 
     return n_intersections;
 }
@@ -245,6 +169,8 @@ int main( int argc, char* argv[] )
     if (argc > 2) {
         iterations = atoi(argv[2]);
     }
+
+    srand(3);
 
     init_circles(n);
     const double tstart_prog = hpc_gettime();

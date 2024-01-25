@@ -61,65 +61,95 @@ void reset_displacements( void )
     }
 }
 
+void iterate(const int start_index, float** dx, float** dy, int * n_intersections, int my_rank) {
+    //iteration_done[my_rank]++;
+    int i = start_index;
+    for (int j=i+1; j<ncircles; j++) {
+        //iteration_done[my_rank]++;
+        const float deltax = circles[j].x - circles[i].x;
+        const float deltay = circles[j].y - circles[i].y;
+        const float dist = hypotf(deltax, deltay);
+        const float Rsum = circles[i].r + circles[j].r;
+        if (dist < Rsum - EPSILON) {
+            n_intersections[my_rank]++;
+            const float overlap = Rsum - dist;
+            assert(overlap > 0.0);
+            // avoid division by zero
+            const float overlap_x = overlap / (dist + EPSILON) * deltax;
+            const float overlap_y = overlap / (dist + EPSILON) * deltay;
+            dx[my_rank][i] += -(overlap_x / K);
+            dy[my_rank][i] += -(overlap_y / K);
+            dx[my_rank][j] += (overlap_x / K);
+            dy[my_rank][j] += (overlap_y / K);
+        }
+    }
+}
+
 /**
  * Compute the force acting on each circle; returns the number of
  * overlapping pairs of circles (each overlapping pair must be counted
  * only once).
  */
-int compute_forces( void )
+int compute_forces( int thread_num)
 {
     int n_intersections = 0;
-    int my_rank;
 
-    const double tstart_iter = hpc_gettime();
+    const double tstart_iter_total = hpc_gettime();
 
-    long long *iteration_done = (long long*)calloc(8, sizeof(*iteration_done));
+    int my_rank, my_first, my_last;
 
-    #pragma omp parallel default(none) private(my_rank) shared(circles, EPSILON, ncircles, K, iteration_done) reduction(+:n_intersections)
+    float **dx = (float**)malloc(thread_num*sizeof(*dx));
+    float **dy = (float**)malloc(thread_num*sizeof(*dy));
+
+    for (int i = 0; i < thread_num; i++) {
+        dx[i] = (float*)calloc(ncircles, sizeof(**dx));
+        dy[i] = (float*)calloc(ncircles, sizeof(**dy));
+    }
+
+    int *private_intersection = (int*)calloc(thread_num, sizeof(*private_intersection));
+    int left_border, right_border;
+    
+    left_border = ncircles / 2 + 1;
+    right_border = ncircles / 2;
+
+    #pragma omp parallel shared(dx, dy, ncircles, private_intersection, circles, EPSILON, K, thread_num, left_border, right_border) private(my_first, my_last, my_rank) default(none)
 {
     my_rank = omp_get_thread_num();
-    #pragma omp for collapse(2) schedule(static, ncircles) 
-    for (int i=0; i<ncircles; i++) {
-        for (int j=0; j<ncircles; j++) {
-            iteration_done[my_rank]++;
-            if (j==i) {
-                continue;
-            }
-            const float deltax = circles[j].x - circles[i].x;
-            const float deltay = circles[j].y - circles[i].y;
-            /* hypotf(x,y) computes sqrtf(x*x + y*y) avoiding
-               overflow. This function is defined in <math.h>, and
-               should be available also on CUDA. In case of troubles,
-               it is ok to use sqrtf(x*x + y*y) instead. */
-            const float dist = hypotf(deltax, deltay);
-            const float Rsum = circles[i].r + circles[j].r;
-            if (dist < Rsum - EPSILON) {
-                n_intersections++;
-                const float overlap = Rsum - dist;
-                assert(overlap > 0.0);
-                // avoid division by zero
-                const float overlap_x = overlap / (dist + EPSILON) * deltax;
-                const float overlap_y = overlap / (dist + EPSILON) * deltay;
-                if (j<i) {
-                    circles[i].dx += (overlap_x / K);
-                    circles[i].dy += (overlap_y / K);
-                } else {
-                    circles[i].dx += -(overlap_x / K);
-                    circles[i].dy += -(overlap_y / K);
-                }
-            }
+    my_first = my_rank;
+    my_last = ncircles - 1 - my_first;
+    while (my_first < left_border || (my_last > right_border)) {
+        if ( my_first < left_border ) {
+            iterate(my_first, dx, dy, private_intersection, my_rank);
         }
+        if ( my_last > right_border) {
+            iterate(my_last, dx, dy, private_intersection, my_rank);
+        }
+        my_first = my_first + thread_num;
+        my_last = ncircles - 1 - my_first;
     }
 }
-    const double elapsed_iter = hpc_gettime() - tstart_iter;
 
-    printf("(%f s)\n", elapsed_iter);
-
-    for (int i=0; i < 8; i++) {
-        printf("Thread with id: %d did %lld iterations\n", i, iteration_done[i]);
+    #pragma omp parallel for schedule(static, ncircles) default(none) shared(ncircles, thread_num, dx, dy, circles, private_intersection) reduction(+:n_intersections)
+    for (long long i = 0; i < thread_num; i++) {
+        for (long long j = 0; j < ncircles; j++) {
+            circles[j].dx+=dx[i][j];
+            circles[j].dy+=dy[i][j];
+        }
+        n_intersections+=private_intersection[i];
     }
 
-    free(iteration_done);
+    const double total_elapsed_iter = hpc_gettime() - tstart_iter_total;
+
+    printf("total iteration took: (%f s)\n", total_elapsed_iter);
+
+    for (int i = 0; i < thread_num; i++) {
+        free(dx[i]);
+        free(dy[i]);
+    }
+    
+    free(dx);
+    free(dy);
+    free(private_intersection);
 
     return n_intersections;
 }
@@ -171,7 +201,12 @@ int main( int argc, char* argv[] )
 {
     int n = 10000;
     int iterations = 20;
+    const char* str_num_threads = getenv("OMP_NUM_THREADS");
+    int num_threads;
 
+    assert(str_num_threads!=NULL);
+    num_threads = atoi(str_num_threads);
+    
     if ( argc > 3 ) {
         fprintf(stderr, "Usage: %s [ncircles [iterations]]\n", argv[0]);
         return EXIT_FAILURE;
@@ -195,7 +230,7 @@ int main( int argc, char* argv[] )
     for (int it=0; it<iterations; it++) {
         const double tstart_iter = hpc_gettime();
         reset_displacements();
-        const int n_overlaps = compute_forces();
+        const int n_overlaps = compute_forces(num_threads);
         move_circles();
         const double elapsed_iter = hpc_gettime() - tstart_iter;
 #ifdef MOVIE

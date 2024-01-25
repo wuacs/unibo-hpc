@@ -224,7 +224,7 @@ int main( int argc, char* argv[] )
         iterations = atoi(argv[2]);
     }
 
-    srand(43242);
+    srand(3);
 
     init_circles(n);
     const double tstart_prog = hpc_gettime();
