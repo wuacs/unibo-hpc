@@ -43,3 +43,11 @@ a += 2;
 }
 /* a has value 3 + 3 + 3 + 2(initial value) = 11 */
  ```
+---
+## Question 5:
+### If you had a domain perfectly divisble between the amount of cores/threads you have, how would you address this load unbalancing?
+#### Answer:
+Let _d_ be the size of domain and _p_ the number of threads and _dp_=_d_%_p_. <br>
+- First solution is to give to each thread with id value(taken from function _omp_get_thread_num()_) less than _dp_ an extra unit of domain. So the first _dp_ threads will do one additional unit of work.
+- Another solution is to split ranges with following indexes: thread of id _i_ has first domain element index the element with index _(n*i_)/_p_ and last element with index _(n*(i+1))_/_p_.
+---
