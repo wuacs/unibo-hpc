@@ -16,3 +16,13 @@ It is in the sense of parallelization of some parts of the programs, one at the 
 - It does __not__ garauntee speed up. For example  parallelized parallel regions could be parallelized in an highly inefficient way or the overhead caused by syncronization of execution units could overrule the speed up gained by the parallelization.
 - When data dependencies are present, _data races_ are not handled by anyone except the responsible programmer with directives provided by the omp libraries like _pragma_omp_critial_ or _pragma_omp_atomic_ or with any code restructurization that prevents data dependencies. In distribuited memory parallelization paradigms this does not happen.
 ---
+
+## Question 3:
+### What is oversubscription? Give some examples on scenarios where this thing may happen
+#### Answer:
+Oversubscription happens when there are more __logical threads__, which are executing parallel regions, than processor cores. 
+
+This might happen with nested parallelism: let _p_ be the number of threads executing a parallel region _p1_ and let this be the ideal case where _p_ = number of physical cores of the CPU(So no Hyperthreading for example). <br>
+ 
+ If there is another parallel region _p2_ defined inside the structured block which _p1_ parallelizes then each thread will create its pool of, now logical, threads which will execute _p2_.<br>
+ It is obvious that the parallel regions _p2_ will not be all executed in parallel(except in the case where the pool size in _p2_=1) thus penalizing the performance. 
