@@ -35,13 +35,11 @@ This might happen with nested parallelism: let _p_ be the number of threads exec
  At the end of the structured block in which the reduction is decleared, the private value of _variable_ of each thread is going to be computed with _op_ operation and with the value of _variable_ that it had before entering the block on which the reduction has been called.
 
  ```
-    ...
 int a = 2;
 #pragma omp parallel reduction(*:a) num_threads(3)
 {
 /* implicit initialization a = 1 */
 a += 2;
 }
-/**/
-
+/* a has value 3 + 3 + 3 + 2(initial value) = 11 */
  ```
