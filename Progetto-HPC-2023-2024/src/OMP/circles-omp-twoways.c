@@ -94,7 +94,7 @@ int compute_forces( int thread_num)
 {
     int n_intersections = 0;
 
-    const double tstart_iter_total = hpc_gettime();
+    //const double tstart_iter_total = hpc_gettime();
 
     int my_rank, my_first, my_last;
 
@@ -138,9 +138,9 @@ int compute_forces( int thread_num)
         n_intersections+=private_intersection[i];
     }
 
-    const double total_elapsed_iter = hpc_gettime() - tstart_iter_total;
+    //const double total_elapsed_iter = hpc_gettime() - tstart_iter_total;
 
-    printf("total iteration took: (%f s)\n", total_elapsed_iter);
+    //printf("total iteration took: (%f s)\n", total_elapsed_iter);
 
     for (int i = 0; i < thread_num; i++) {
         free(dx[i]);

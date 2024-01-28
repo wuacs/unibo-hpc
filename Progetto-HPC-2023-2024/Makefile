@@ -30,7 +30,7 @@ movie_omp: $(OMP_MOVIE_EXE)
 movie_directory:
 	mkdir -p $(MOVIEDIR)
 
-$(OMP_EXE): $(SRC)
+$(OMP_EXE): $(OMP_SRC)
 	$(CC) -fopenmp $(CFLAGS) $< -o $@ $(LDLIBS)
 
 $(CUDA_EXE): $(CUDA_SRC)
