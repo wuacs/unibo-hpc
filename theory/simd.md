@@ -65,8 +65,8 @@ int count(int x) {
 }
 ```
 #### Answer:
-One technique we can use is called _selection and masking_ or _masking_and_blending_.<br>
-It suppose to use operators like `<` in order to get as output a SIMD vector with value `0` where evaluation of the operation is `False` otherwise `-1`(which is rapresented as all ones 111..1).
+One technique we can use is called _selection and masking_ or _masking and blending_.<br>
+It supposes the use of operators like `<` in order to get as output a SIMD vector with value `0` where evaluation of the operation is `False` otherwise `-1`(which is rapresented as all ones 111..1).
 
 Regarding the snippet: 
 ```
@@ -77,6 +77,7 @@ int count(int x) {
     for (int i = 0; i < N - 3; i+=4) {
         v4d mask = *a_ved == x; /* This produces some permutation of length 4 of {0,-1} */
         vec_cnt += (*mask & *a_ved); 
+        a_vec++;
     }
     cnt = vec_cnt[0] + vec_cnt[1] + vec_cnt[2] + vec_cnt[3];
     /* Handle possible leftovers */
