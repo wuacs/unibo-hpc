@@ -1,79 +1,13 @@
-# OpenMP Q/A
+# MPI Q/A
 
 ## Question 1:
-### Define Amdahl's law, what are its limitations?
+### On which computational paradigm does MPI stand? And what, if any, differences has with SIMD paradigm?
+
 #### Answer:
 
-Amdahl's law says that the speed up, obtainable by the parallezation of some parts of some program, is bounded by the percentage of serial activity a program executes.
-
-$$Speedup(p)=\frac{T_{serial}}{T_{parallel}}=\frac{T_{serial}}{\alpha T_{serial}+(1-\alpha)\frac{T_{serial}}{p}}$$
-
-$$\lim_{p \to \infty}{Speedup(p)}=\frac{T_{serial}}{\alpha T_{serial}}=\frac{1}{\alpha}$$
-
-__Important Observations:__
-
-- This result holds only if we have `perfectly` parallelizable parts. It does __not__ take into account `overhead`, `bottlenecks`, `communication costs` which should penalize the speed up as the more executing units we have the more communication has to be done.
-
-- It is a very limited point of view to judge that a program's speedup is solely bounded by the fraction of time it spends in serial execution. This becomes clear as lots of high performance computing is done on very large `work domains`, which is parallelized, and little time is spent on serial instructions. This gave an idea to Lars Gustaffson which then elaborated the `Gustaffson Law` and expanded on the concept of Efficiency.
----
-
-## Question 2:
-### Define what is Weak Scaling Efficiency and give an example on Matrix product.
-#### Answer:
-
-`Weak Scaling Efficiency` (WSE) is a measure which gives us how much a program's time execution scales well with increasing problem size. <br>
-Ideally it would remain fixed at `1` if incrementing the number of processes and the problem size by a fixed rate would make the computation take always the same time. <br>
-
-Since it is obsolete to only talk about times(because we are updating processes and problem size) the definition of speed up used by Amdahl's law has to be re-adapted.
-
-Instead of calling it `Speedup 2.0` we are just going to call it `WSE` referecing the metric which created this mapping.
-
-$$WSE(p)=\frac{T_1}{T_p}$$
-
-Where $T_1$ is the time the program needs to execute a `base work load` as problem size using `1` execution unit.<br>
-$T_p$ is the time the program needs to execute an appropriate calculated problem size using `p` execution units, the problem size is calculated so to keep a `base work load` number of parallel instructions executed for each of the `p` processors used.
-
-__Matrix product example__
-
-Let's say we need product of matrix `A`(mxn) and `B`(kxm) and suppose we do a coarse grained division of domain since no load inbalancing can incur in dot products. <br>
-Namely, we want to calculate how much we do need to increase `m` in order to keep the time equal to the base case i.e. $T_1$.
-
-Hypothesize that the algorithm takes $O(n^3)$ so ideally each thread is going to take $O((n^3)/p)$ time/work to finish.
-
-Let's say we choose `base work load` to be `1024` which is `m` value.<br>
-$T_1=n^3=1024^3$
-$$\frac{m^3}{p}=1024^3\rightarrow m^3=1024^3 \cdot p\rightarrow m=\sqrt[3]{p}\cdot 1024$$
-
-And now we have the formula for calculating the new `m` to have each thread do "`1024^3`" computation.
- 
----
-
-## Question 3:
-### Define what is Strong Scaling Efficiency.
-#### Answer:
-
-`Strong Scaling Efficiency`(SSE) is a metric which measures how well a given parallel program scales in execution time in respect to an increasing number of processors and a fixed problem size.
-
-Its formulation uses the $Speedup(p)$ defined [here](#answer).
-
-$$ SSE(p)=\frac{Speedup(p)}{p}$$
-
-__Important observations__:
-- Hypothesize the ideal case where all the program is parallelizable. The speed up, called in this case `linear`, is equal to `p`. This gives us an upperbound on the value of $SSE(p)$ equal to `1`.
-
----
-
-## Question 3:
-### Define what is Strong Scaling Efficiency.
-#### Answer:
-
-`Strong Scaling Efficiency`(SSE) is a metric which measures how well a given parallel program scales in execution time in respect to an increasing number of processors and a fixed problem size.
-
-Its formulation uses the $Speedup(p)$ defined [here](#answer).
-
-$$ SSE(p)=\frac{Speedup(p)}{p}$$
-
-__Important observations__:
-- Hypothesize the ideal case where all the program is parallelizable. The speed up, called in this case `linear`, is equal to `p`. This gives us an upperbound on the value of $SSE(p)$ equal to `1`.
+SPMD(Single Program Multiple Data) is the paradigm used by MPI. 
+It uses multiple processors which at the same time can differ on the point of the control flow they are at. <br>
+This opposes SIMD paradigm where all processors execute the same instructions, at the same time. <br>
+It is important to note that one does not exclude the other: it's possible that in a MPI application one uses `vector processing` SIMD instructions or invokes GPU processing which relies on SIMD-like processors.
 
 ---
