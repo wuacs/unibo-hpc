@@ -1,4 +1,4 @@
-# OpenMP Q/A
+# Performance Q/A
 
 ## Question 1:
 ### Define Amdahl's law, what are its limitations?
