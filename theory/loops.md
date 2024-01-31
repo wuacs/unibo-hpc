@@ -155,7 +155,7 @@ We say there are generally three types of dependencies: `flow/true dependency`, 
         B[i] = tmp;
     }
     ```
-    Solution is to make tmp private:
+    Solution is to make tmp private(with OpenMP using the _private_ directive):
     ```
     for (i = 0; i < n; i++) {
         int tmp = A[i];
@@ -163,4 +163,123 @@ We say there are generally three types of dependencies: `flow/true dependency`, 
         B[i] = tmp;
     }
     ```
+---
+
+## Question 5:
+### Refer to snippet below. How would you use an Even/Odd parallelization technique(with task parallelization). 
+```
+for (i = 2; i < n; i++)
+    a[i] = a[i-2] + x;
+```
+#### Answer:
+
+Observation: purpose of even/odd parallelization is to split iterations between iterations using `even` and `odd` indexes. So, in the example i = 2, i = 4, i = 6...can be given to a loop and i = 3, i = 5, i = 7... can be given to another one.
+With OpenMP we can then parallelized those loops with task parallelization.
+```
+/* create parallel region */
+#pragma omp single {
+    #pragma omp task
+    for (i = 2; i < n; i+=2)
+        a[i] = a[i-2] + x;
+}
+#pragma omp single {
+    #pragma omp task
+    for (i = 3; i < n; i+=2)
+        a[i] = a[i-2] + x;
+}
+
+```
+
+## Question 6:
+### Refer to the following loop, how would you reconstruct the code so that one or more loops can be parallelized? 
+```
+for ( i = 0; i < n-1; i++ )
+    a[i] = a[i+1] + b[i] * c[i];    
+```
+#### Answer:
+
+Observation: there is an `anti-dependency` on array `a`.
+
+```
+a_copy = a.copy();
+for ( i = 0; i < n-1; i++ )
+    a[i] = a_copy[i+1] + b[i] * c[i];
+```
+
+---
+
+## Question 7:
+### Refer to the following loop, how would you reconstruct the code so that one or more loops can be parallelized? 
+```
+for ( i = 1; i < n; i++ )
+    a[i] = a[i-1] + b[i] * c[i];
+/* a[0] = ~
+a[1] = a[0] + ...
+a[2] = a[0] + b[1]*c[1] + b[2]*c[2]
+*/
+```
+#### Hint:
+
+a[0] = ~ <br>
+a[1] = a[0] + b[1]*c[1] <br>
+a[2] = a[0] + b[1]*c[1] + b[2]*c[2] <br>
+...
+
+#### Answer:
+
+Observation: there is an `flow dependency` on array `a`. Solution works only with OpenMP 5.0 or newer.
+
+```
+bc[n];
+bperc = 0;
+
+#pragma omp parallel for reduction(inscan, +:bperc)
+for (i = 1; i < n; i++) {
+    bperc += b[i]*c[i];
+    #pragma omp scan inclusive(bperc)
+    bc[i] = bperc;   
+}
+
+#pragma omp parallel for shared(a, bc, n)
+for ( i = 1; i < n; i++ )
+    a[i] = a[0] + bc[i];
+```
+---
+
+## Question 8:
+### Refer to the following loop, how would you reconstruct the code so that one or more loops can be parallelized? 
+```
+t = 1;
+for ( i = 0; i < n-1; i++ ) {
+    a[i] = a[i+1] + b[i] * c[i];
+    t = t * a[i];
+}   
+```
+#### Answer:
+
+Observation: there is an `flow dependency` on array `a` and a `output dependency` on variable `t`.
+
+Array `a` is changed based on `b` and `c` and also based on `a` initial values.<br>
+So if we created a copy of `a` we could parallelize `a` updates.
+
+With regards to `t` we simply observe that `t` is not used in the `for` iterations but simply calculated.<br>
+When exiting the loop `t`'s expression is: `t=pow(t, n-1)*reduction(a)`.<br>
+BUT, since `t` initial value is `1`, the expression simplifies into: `t=reduction(a)`.
+
+In regard to OpenMP we can use clause `reduction(*:x)` to get `a[0]*a[1]*...*a[n-1]` written in a variable `x`.
+
+```
+t = 0;
+a_copy[] = a.copy(); /* Pseudo copy function */
+
+#pragma omp parallel for reduction(*:t)
+for ( i = 0; i < n-1; i++) {
+    t *= a[i];
+}
+
+for ( i = 0; i < n-1; i++ ) {
+    a[i] = a_copy[i+1] + b[i] * c[i];
+}   
+```
+
 ---
