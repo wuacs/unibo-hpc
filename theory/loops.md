@@ -90,3 +90,77 @@ To address this one solution would be to create `private` max delta variables fo
 For OpenMP a `collapse(2)` with fixed size chunks of statically scheduled iterations would be the best choice as there is no sign of load unbalancing between iterations.
 
 ---
+
+## Question 4:
+### Can you give classical classification of loop dependencies?
+
+#### Answer:
+
+We say there are generally three types of dependencies: `flow/true dependency`, `Anti dependency` and `output dependency`.
+
+- A `flow dependency` is found when iteration _i_ of the loop writes on a memory address read by iteration _i+1_. Examples of this are reductions and Induction varibles.
+    - `Reduction example`: 
+    ```
+    int a[] = {.....}
+    int x = 0;
+    for (int i=0; i<n; i++) {
+        x+=a[i];
+    }
+    ```
+    Can be rewritten as:
+    ```
+    int x = 0;
+    int xs[SIZEOFTHREADS]; /* NEW */
+    /* this for is parallelizable */
+    for (int i=0; i<n; i++) {
+        xs[my_id]+=a[my_id];
+    }
+    /* is to be done serially */
+    for (int j=0; j<SIZEOFTHREADS; j++) {
+        x+=xs[j];
+    }
+    ```
+    - `Induction var. example`:
+    ```
+    j = 5;
+    for (i = 1; i < n; i++) {
+        j += 2;
+        a[i] = f(j);
+    }
+    ```
+    Can be rewritten as:
+    ```
+    for (i = 1; i < n; i++) {
+        a[i] = f(5+2*i);
+    }
+    ```
+- An `anti-dependence` is found when iteration _i_ of the loop reads on a memory address written by iteration _i+1_. Example:
+    - Example:
+    ```
+    for (i = 0; i < n-1; i++)
+        a[i] = a[i+1] + f(i);
+    ``` 
+    Solution consists in creating a copy of a.
+    ```
+    a_copy = a.copy();
+    for (i = 0; i< n-1; i++)
+        a[i] = a_copy[i+1] + f(i)
+    ```
+- An `output dependency` is found when iteration _i_ of the loop writes on a memory address written by iteration _i+1_.
+    - Example:
+    ```
+    for (i = 0; i < n; i++) {
+        tmp = A[i]; /* tmp is writeen by all iterations */
+        A[i] = B[i];
+        B[i] = tmp;
+    }
+    ```
+    Solution is to make tmp private:
+    ```
+    for (i = 0; i < n; i++) {
+        int tmp = A[i];
+        A[i] = B[i];
+        B[i] = tmp;
+    }
+    ```
+---
