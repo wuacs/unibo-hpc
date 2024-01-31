@@ -24,7 +24,7 @@ The superlinear speed up, apart from errors in measuring, could be caused by:
 ## Question 2:
 ### Refer to the code snippet proposed in question 1, how would you address the possibility of domain size not being multiple of the SIMD vector?
 #### Answer:
-- Padding: we could just extend the domain size with dummy values if this modify the behaviour of the program.
+- Padding: we could just extend the domain size with dummy values if this doesn't modify the behaviour of the program.
 - Manual handling(scalar operations): we could leave to the main thread the work of handling alone the rest of the domain elements.
 ---
 ## Question 3:
