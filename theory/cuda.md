@@ -44,13 +44,10 @@ It is possible to maximize the throughput of the access on CUDA's memory if all 
 ---
 
 ## Question 5:
-### Why is efficient to have more threads per block than more threads but less blocks?
+### Why is efficient to have more threads per block than more blocks but less threads per block?
 
 #### Answer
 
 Because when all threads in a warp access data from memory, if you benefit from coalescens of memory access, the bus is going to be saturated and per unit of time you will be getting more data from the memory.
-
----
-
 
 ---
