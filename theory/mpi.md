@@ -26,20 +26,6 @@ It is important to note that one does not exclude the other: it's possible that 
 
 ---
 
-## Question 2:
-### Describe advantages and disadvantages of Distribuited Memory Systems.
-
-### Answer:
-
-- Adavantages:
-    - No data races
-    - Forces the programmer to think of Locality(because he needs to handle alone distribution of domain's memory addresses).
-- Disadvantages:
-    - Possible communication errors.
-    - Code more complex and bigger.
-
----
-
 ## Question 3:
 ### Explain in what do _point-to-point_ and _collective_ MPI communications differ.
 
