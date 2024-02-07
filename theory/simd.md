@@ -28,7 +28,7 @@ The superlinear speed up, apart from errors in measuring, could be caused by:
 - Manual handling(scalar operations): we could leave to the main thread the work of handling alone the rest of the domain elements.
 ---
 ## Question 3:
-### Refer to the following snippet, why do you think GCC 7.5.0 does __not__ vectorize this loop?
+### Refer to the following snippet, why do you think GCC 7.5.0 does __not__ autovectorize this loop?
 ```
 float vsum(float *v, int n)
 {
