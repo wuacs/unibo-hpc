@@ -63,17 +63,4 @@ __Important observations__:
 
 ---
 
-## Question 3:
-### Define what is Strong Scaling Efficiency.
-#### Answer:
 
-`Strong Scaling Efficiency`(SSE) is a metric which measures how well a given parallel program scales in execution time in respect to an increasing number of processors and a fixed problem size.
-
-Its formulation uses the $Speedup(p)$ defined [here](#answer).
-
-$$ SSE(p)=\frac{Speedup(p)}{p}$$
-
-__Important observations__:
-- Hypothesize the ideal case where all the program is parallelizable. The speed up, called in this case `linear`, is equal to `p`. This gives us an upperbound on the value of $SSE(p)$ equal to `1`.
-
----
