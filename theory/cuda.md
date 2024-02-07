@@ -5,7 +5,8 @@
 
 #### Answer
 
-The CUDA scheduler is smart enough to create pseudo-optimal scheduling and, if it cannot execute all thread blocks at the same time, it will create a queue for access to the SMs.
+The CUDA scheduler is smart enough to create pseudo-optimal scheduling and, if it cannot execute all thread blocks at the same time, it will create a queue for access to the SMs.<br>
+Take note that a SM can execute multiple blocks.
 
 ---
 
